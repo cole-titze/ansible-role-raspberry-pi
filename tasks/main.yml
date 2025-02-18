@@ -86,3 +86,25 @@
     hour: "2"
     user: "root"
   become: true
+
+# Add screen script on boot
+- name: Ensure i2c-tools is installed
+  ansible.builtin.apt:
+    name: i2c-tools
+    state: present
+    update_cache: yes
+
+- name: Copy screen.sh to /usr/local/bin
+  ansible.builtin.copy:
+    src: screen.sh
+    dest: /usr/local/bin/screen.sh
+    mode: '0755'
+    owner: root
+    group: root
+
+- name: Add cron job to run screen.sh on boot
+  ansible.builtin.cron:
+    name: "Run screen.sh at boot"
+    user: "{{ ansible_user }}"  # Uses the current Ansible user
+    special_time: reboot
+    job: "/usr/local/bin/screen.sh"
