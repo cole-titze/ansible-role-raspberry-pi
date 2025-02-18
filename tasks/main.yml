@@ -16,3 +16,73 @@
     insertbefore: "^exit"
     state: present
   with_items: "{{ raspberry_pi_rc_local_options }}"
+
+# Update system
+- name: Update APT package cache
+  apt:
+    update_cache: yes
+  become: true
+
+- name: Check if upgrades are available
+  command: apt list --upgradable
+  register: apt_upgradable
+  changed_when: apt_upgradable.stdout_lines | length > 1
+  become: true
+
+- name: Upgrade all packages if updates are available
+  apt:
+    upgrade: dist
+  become: true
+  when: apt_upgradable.stdout_lines | length > 1
+
+- name: Check if a reboot is required
+  stat:
+    path: /var/run/reboot-required
+  register: reboot_required
+
+- name: Reboot the system if required
+  reboot:
+  become: true
+  when: reboot_required.stat.exists
+
+# Enable I2C
+- name: Check if I2C is enabled
+  command: raspi-config nonint get_i2c
+  register: i2c_status
+  changed_when: false
+  become: true
+
+- name: Enable I2C on the Raspberry Pi (only if needed)
+  command: raspi-config nonint do_i2c 0
+  become: true
+  when: i2c_status.stdout != "0"
+
+# Set the timezone
+- name: Check current timezone
+  command: timedatectl show --property=Timezone --value
+  register: current_timezone
+  changed_when: false
+
+- name: Set timezone to Central Time (America/Chicago) if needed
+  command: timedatectl set-timezone America/Chicago
+  become: true
+  when: current_timezone.stdout != "America/Chicago"
+
+# Add nightly update script
+- name: Copy update script to /usr/local/bin
+  copy:
+    src: update.sh
+    dest: /usr/local/bin/update-system.sh
+    owner: root
+    group: root
+    mode: '0755'
+  become: true
+
+- name: Add cron job for automatic updates
+  cron:
+    name: "Nightly system update"
+    job: "/usr/local/bin/update-system.sh"
+    minute: "0"
+    hour: "2"
+    user: "root"
+  become: true
