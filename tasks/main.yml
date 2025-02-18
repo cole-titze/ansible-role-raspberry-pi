@@ -96,15 +96,7 @@
 
 - name: Copy screen.sh to /usr/local/bin
   ansible.builtin.copy:
-    src: screen.sh
-    dest: /usr/local/bin/screen.sh
-    mode: '0755'
-    owner: root
-    group: root
-
-- name: Copy screen.sh to /usr/local/bin
-  ansible.builtin.copy:
-    src: files
+    src: files/
     dest: /usr/local/bin/oled-screen/screen.sh
     mode: '0755'
     owner: root
