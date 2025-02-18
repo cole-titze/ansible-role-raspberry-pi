@@ -6,7 +6,7 @@ if ! i2cdetect -y 1 | grep -q "XX"; then
 fi
 
 # Define paths
-WORK_DIR="~/computer-setup/rpi/scripts/screen"
+WORK_DIR="/usr/local/bin/oled-screen"
 VENV_DIR="$WORK_DIR/venv"
 PYTHON_SCRIPT="$WORK_DIR/oled-stats.py"
 LOG_FILE="$WORK_DIR/screen.log"
