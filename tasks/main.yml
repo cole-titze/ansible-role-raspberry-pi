@@ -45,18 +45,6 @@
   become: true
   when: reboot_required.stat.exists
 
-# Enable I2C
-- name: Check if I2C is enabled
-  command: raspi-config nonint get_i2c
-  register: i2c_status
-  changed_when: false
-  become: true
-
-- name: Enable I2C on the Raspberry Pi (only if needed)
-  command: raspi-config nonint do_i2c 0
-  become: true
-  when: i2c_status.stdout != "0"
-
 # Set the timezone
 - name: Check current timezone
   command: timedatectl show --property=Timezone --value
@@ -68,43 +56,12 @@
   become: true
   when: current_timezone.stdout != "America/Chicago"
 
-# Add nightly update script
-- name: Copy update script to /usr/local/bin
-  copy:
-    src: update.sh
-    dest: /usr/local/bin/update-system.sh
-    owner: root
-    group: root
-    mode: '0755'
-  become: true
+# Call other scripts
+- name: Add nightly updates
+  ansible.builtin.import_tasks: nightly-update.yml
 
-- name: Add cron job for automatic updates
-  cron:
-    name: "Nightly system update"
-    job: "/usr/local/bin/update-system.sh"
-    minute: "0"
-    hour: "2"
-    user: "root"
-  become: true
+- name: Enable the oled screen
+  ansible.builtin.import_tasks: oled-screen.yml
 
-# Add screen script on boot
-- name: Ensure i2c-tools is installed
-  ansible.builtin.apt:
-    name: i2c-tools
-    state: present
-    update_cache: yes
-
-- name: Copy screen.sh to /usr/local/bin
-  ansible.builtin.copy:
-    src: files/
-    dest: /usr/local/bin/oled-screen/screen.sh
-    mode: '0755'
-    owner: root
-    group: root
-
-- name: Add cron job to run screen.sh on boot
-  ansible.builtin.cron:
-    name: "Run oled-screen.sh at boot"
-    user: "{{ ansible_user }}"  # Uses the current Ansible user
-    special_time: reboot
-    job: "/usr/local/bin/oled-screen/oled-screen.sh"
+- name: Add Static Networking
+  ansible.builtin.import_tasks: static-networking.yml

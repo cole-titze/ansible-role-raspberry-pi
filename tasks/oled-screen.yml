@@ -1,0 +1,34 @@
+---
+# Enable I2C
+- name: Check if I2C is enabled
+  command: raspi-config nonint get_i2c
+  register: i2c_status
+  changed_when: false
+  become: true
+
+- name: Enable I2C on the Raspberry Pi (only if needed)
+  command: raspi-config nonint do_i2c 0
+  become: true
+  when: i2c_status.stdout != "0"
+
+# Add screen script on boot
+- name: Ensure i2c-tools is installed
+  ansible.builtin.apt:
+    name: i2c-tools
+    state: present
+    update_cache: yes
+
+- name: Copy screen.sh to /usr/local/bin
+  ansible.builtin.copy:
+    src: files/
+    dest: /usr/local/bin/oled-screen/screen.sh
+    mode: '0755'
+    owner: root
+    group: root
+
+- name: Add cron job to run screen.sh on boot
+  ansible.builtin.cron:
+    name: "Run oled-screen.sh at boot"
+    user: "{{ ansible_user }}"  # Uses the current Ansible user
+    special_time: reboot
+    job: "/usr/local/bin/oled-screen/oled-screen.sh"
