@@ -20,11 +20,11 @@
 
 - name: Copy screen.sh to /usr/local/bin
   ansible.builtin.copy:
-    src: files/
-    dest: /usr/local/bin/oled-screen/screen.sh
+    src: files/oled-screen/
+    dest: /usr/local/bin/oled-screen
     mode: '0755'
-    owner: root
-    group: root
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
 
 - name: Add cron job to run screen.sh on boot
   ansible.builtin.cron:
