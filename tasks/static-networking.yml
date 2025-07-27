@@ -4,6 +4,16 @@
     path: /etc/dhcpcd.conf
   register: dhcpcd_file_result
 
+- name: Gather OS distribution info
+  ansible.builtin.setup:
+    filter: ansible_distribution
+    gather_subset: min
+
+- name: Remount root filesystem as read-write (Arch only)
+  ansible.builtin.command: rw
+  become: true
+  when: ansible_distribution == "Archlinux"
+
 - name: Configure static IP address (dhcpcd).
   ansible.builtin.blockinfile:
     path: /etc/dhcpcd.conf
@@ -36,3 +46,8 @@
       {% for host in groups['cluster'] %}
       {{ ipv4_subnet_prefix }}.{{ hostvars[host].ip_host_octet }} {{ host }} {{ host | regex_replace('\.local', '') }}
       {% endfor %}
+
+- name: Remount root filesystem as read-only (Arch only)
+  ansible.builtin.command: mount -o remount,ro /
+  become: true
+  when: ansible_distribution == "Archlinux"
