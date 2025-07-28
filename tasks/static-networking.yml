@@ -55,8 +55,8 @@
           [Network]
           Address={{ ipv4_subnet_prefix }}.{{ ip_host_octet }}/24
           Gateway={{ ipv4_gateway }}
-          DNS={{ dns1 }}
-          DNS={{ dns2 }}
+          DNS={{ dns4_servers }}
+          DNS={{ dns4_servers }}
 
     - name: Set static IP for Wi-Fi (wlan0)
       copy:
