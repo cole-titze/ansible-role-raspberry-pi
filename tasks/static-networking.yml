@@ -38,17 +38,10 @@
 
 - name: Configure static IP for Arch (PiKVM-style)
   block:
-    - name: Remount root filesystem as read-write (Arch only)
-      ansible.builtin.command: rw
-      become: true
 
-    - name: Set static IP for Ethernet (eth0)
-      copy:
-        dest: /etc/systemd/network/eth0.network
-        owner: root
-        group: root
-        mode: '0644'
-        content: |
+    - name: Define desired eth0.network content
+      set_fact:
+        eth0_network_desired: |
           [Match]
           Name=eth0
 
@@ -57,15 +50,10 @@
           Gateway={{ ipv4_gateway }}
           DNS={{ dns4_servers }}
           DNS={{ dns4_servers }}
-      register: eth0_network_changed
 
-    - name: Set static IP for Wi-Fi (wlan0)
-      copy:
-        dest: /etc/systemd/network/wlan0.network
-        owner: root
-        group: root
-        mode: '0644'
-        content: |
+    - name: Define desired wlan0.network content
+      set_fact:
+        wlan0_network_desired: |
           [Match]
           Name=wlan0
 
@@ -74,25 +62,70 @@
           Gateway={{ ipv4_gateway }}
           DNS={{ dns4_servers }}
           DNS={{ dns4_servers }}
+
+    - name: Read current eth0.network file if it exists
+      ansible.builtin.slurp:
+        path: /etc/systemd/network/eth0.network
+      register: eth0_network_current
+      ignore_errors: yes
+
+    - name: Read current wlan0.network file if it exists
+      ansible.builtin.slurp:
+        path: /etc/systemd/network/wlan0.network
+      register: wlan0_network_current
+      ignore_errors: yes
+
+    - name: Decode eth0.network or use empty string
+      set_fact:
+        eth0_network_current_decoded: "{{ eth0_network_current.content | default('') | b64decode | string }}"
+
+    - name: Decode wlan0.network or use empty string
+      set_fact:
+        wlan0_network_current_decoded: "{{ wlan0_network_current.content | default('') | b64decode | string }}"
+
+    - name: Determine if eth0.network needs update
+      set_fact:
+        eth0_network_needs_update: "{{ eth0_network_desired.strip() != eth0_network_current_decoded.strip() }}"
+
+    - name: Determine if wlan0.network needs update
+      set_fact:
+        wlan0_network_needs_update: "{{ wlan0_network_desired.strip() != wlan0_network_current_decoded.strip() }}"
+
+    - name: Remount root filesystem as read-write if needed
+      ansible.builtin.command: rw
+      become: true
+      when: eth0_network_needs_update or wlan0_network_needs_update
+
+    - name: Update eth0.network if needed
+      copy:
+        dest: /etc/systemd/network/eth0.network
+        owner: root
+        group: root
+        mode: '0644'
+        content: "{{ eth0_network_desired }}"
+      when: eth0_network_needs_update
+      register: eth0_network_changed
+
+    - name: Update wlan0.network if needed
+      copy:
+        dest: /etc/systemd/network/wlan0.network
+        owner: root
+        group: root
+        mode: '0644'
+        content: "{{ wlan0_network_desired }}"
+      when: wlan0_network_needs_update
       register: wlan0_network_changed
 
-    - name: Remount root filesystem as read-only (Arch only)
+    - name: Remount root filesystem as read-only if changed
       ansible.builtin.command: mount -o remount,ro /
       become: true
+      when: eth0_network_needs_update or wlan0_network_needs_update
 
     - name: Reboot Pi to apply static IP changes
       reboot:
         msg: "Rebooting to apply static IP configuration"
         connect_timeout: 5
         reboot_timeout: 300
-      when: eth0_network_changed.changed or wlan0_network_changed.changed
-  when: ansible_distribution == "Archlinux"
+      when: eth0_network_needs_update or wlan0_network_needs_update
 
-- name: Configure hosts file so nodes can see each other by hostname.
-  ansible.builtin.blockinfile:
-    path: /etc/hosts
-    marker: "# ANSIBLE MANAGED - static ip config {mark}"
-    block: |
-      {% for host in groups['cluster'] %}
-      {{ ipv4_subnet_prefix }}.{{ hostvars[host].ip_host_octet }} {{ host }} {{ host | regex_replace('\.local', '') }}
-      {% endfor %}
+  when: ansible_distribution == "Archlinux"
