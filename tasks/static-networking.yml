@@ -1,42 +1,89 @@
 ---
-- name: Check if using dhcpcd for networking.
-  ansible.builtin.stat:
-    path: /etc/dhcpcd.conf
-  register: dhcpcd_file_result
-
 - name: Gather OS distribution info
   ansible.builtin.setup:
     filter: ansible_distribution
     gather_subset: min
 
-- name: Remount root filesystem as read-write (Arch only)
-  ansible.builtin.command: rw
-  become: true
+- name: Configure static IP for non-Arch systems
+  block:
+    - name: Check if using dhcpcd for networking.
+      ansible.builtin.stat:
+        path: /etc/dhcpcd.conf
+      register: dhcpcd_file_result
+
+    - name: Configure static IP address (dhcpcd).
+      ansible.builtin.blockinfile:
+        path: /etc/dhcpcd.conf
+        marker: "# ANSIBLE MANAGED - static ip {mark}"
+        block: |
+          interface eth0
+          static ip_address={{ ipv4_subnet_prefix }}.{{ ip_host_octet }}/24
+          static routers={{ ipv4_subnet_prefix }}.1
+          static domain_name_servers={{ ipv4_subnet_prefix }}.1
+      notify: restart dhcpcd
+      when: dhcpcd_file_result.stat.exists
+
+    - name: Configure static IP address (Network Manager).
+      community.general.nmcli:
+        conn_name: "Wired connection 1"
+        ifname: eth0
+        type: ethernet
+        ip4: "{{ ipv4_subnet_prefix }}.{{ ip_host_octet }}/24"
+        gw4: "{{ ipv4_gateway }}"
+        dns4: "{{ dns4_servers }}"
+        state: present
+      notify: restart networkmanager
+      when: not dhcpcd_file_result.stat.exists
+  when: ansible_distribution != "Archlinux"
+
+- name: Configure static IP for Arch (PiKVM-style)
+  block:
+    - name: Remount root filesystem as read-write (Arch only)
+      ansible.builtin.command: rw
+      become: true
+
+    - name: Set static IP for Ethernet (eth0)
+      copy:
+        dest: /etc/systemd/network/eth0.network
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          [Match]
+          Name=eth0
+
+          [Network]
+          Address={{ ipv4_subnet_prefix }}.{{ ip_host_octet }}/24
+          Gateway={{ ipv4_gateway }}
+          DNS={{ dns1 }}
+          DNS={{ dns2 }}
+
+    - name: Set static IP for Wi-Fi (wlan0)
+      copy:
+        dest: /etc/systemd/network/wlan0.network
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          [Match]
+          Name=wlan0
+
+          [Network]
+          Address={{ ipv4_subnet_prefix }}.{{ ip_host_octet }}/24
+          Gateway={{ ipv4_gateway }}
+          DNS={{ dns4_servers }}
+          DNS={{ dns4_servers }}
+
+    - name: Remount root filesystem as read-only (Arch only)
+      ansible.builtin.command: mount -o remount,ro /
+      become: true
+
+    - name: Reboot Pi to apply static IP changes
+      reboot:
+        msg: "Rebooting to apply static IP configuration"
+        connect_timeout: 5
+        reboot_timeout: 300
   when: ansible_distribution == "Archlinux"
-
-- name: Configure static IP address (dhcpcd).
-  ansible.builtin.blockinfile:
-    path: /etc/dhcpcd.conf
-    marker: "# ANSIBLE MANAGED - static ip {mark}"
-    block: |
-      interface eth0
-      static ip_address={{ ipv4_subnet_prefix }}.{{ ip_host_octet }}/24
-      static routers={{ ipv4_subnet_prefix }}.1
-      static domain_name_servers={{ ipv4_subnet_prefix }}.1
-  notify: restart dhcpcd
-  when: dhcpcd_file_result.stat.exists
-
-- name: Configure static IP address (Network Manager).
-  community.general.nmcli:
-    conn_name: "Wired connection 1"
-    ifname: eth0
-    type: ethernet
-    ip4: "{{ ipv4_subnet_prefix }}.{{ ip_host_octet }}/24"
-    gw4: "{{ ipv4_gateway }}"
-    dns4: "{{ dns4_servers }}"
-    state: present
-  notify: restart networkmanager
-  when: not dhcpcd_file_result.stat.exists
 
 - name: Configure hosts file so nodes can see each other by hostname.
   ansible.builtin.blockinfile:
@@ -46,8 +93,3 @@
       {% for host in groups['cluster'] %}
       {{ ipv4_subnet_prefix }}.{{ hostvars[host].ip_host_octet }} {{ host }} {{ host | regex_replace('\.local', '') }}
       {% endfor %}
-
-- name: Remount root filesystem as read-only (Arch only)
-  ansible.builtin.command: mount -o remount,ro /
-  become: true
-  when: ansible_distribution == "Archlinux"
