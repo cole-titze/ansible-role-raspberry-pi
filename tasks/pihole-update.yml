@@ -1,0 +1,16 @@
+---
+- name: Check if Pi-hole is installed
+  ansible.builtin.command: which pihole
+  register: pihole_installed
+  changed_when: false
+  failed_when: false
+
+- name: Schedule nightly Pi-hole update via cron
+  ansible.builtin.cron:
+    name: "Nightly Pi-hole update"
+    minute: "30"
+    hour: "2"
+    job: "pihole -up >> /var/log/pihole-update.log 2>&1"
+    user: root
+    state: present
+  when: pihole_installed.rc == 0

@@ -58,6 +58,9 @@
     - name: Add nightly updates
       ansible.builtin.import_tasks: nightly-update.yml
 
+    - name: Add nightly Pi-hole update
+      ansible.builtin.import_tasks: pihole-update.yml
+
     - name: Enable the oled screen
       ansible.builtin.import_tasks: oled-screen.yml
 
@@ -76,7 +79,3 @@
         autoremove: true
 
   when: ansible_distribution in ["Debian", "Raspbian", "Ubuntu"]
-
-# Always run static networking
-- name: Add Static Networking
-  ansible.builtin.import_tasks: static-networking.yml
