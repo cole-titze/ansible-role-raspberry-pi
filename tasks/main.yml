@@ -78,4 +78,4 @@
       apt:
         autoremove: true
 
-  when: ansible_distribution in ["Debian", "Raspbian", "Ubuntu"]
+  when: ansible_facts['distribution'] in ["Debian", "Raspbian", "Ubuntu"]
